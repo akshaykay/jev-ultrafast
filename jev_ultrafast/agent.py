@@ -73,12 +73,12 @@ class Agent:
                 return self.command("act", {"fingerprint": state["page"]["fingerprint"]})
             except StalePage:
                 state["decision"] = None
-                state["status"] = "ready"
-                state["page"] = state["browser"].observe(screenshot=self.screenshots)
-                state["elapsed_ms"] = round((time.perf_counter() - state["started_at"]) * 1000)
-                # Recovery must not revive a run the no-progress check already condemned.
-                if stalled(state["history"]):
-                    state["status"] = "blocked"
+                # Evaluate before recovering: a failed recovery observation
+                # must not erase the stalled result and re-enable decisions.
+                state["status"] = "blocked" if stalled(state["history"]) else "ready"
+                if state["status"] == "ready":
+                    state["page"] = state["browser"].observe(screenshot=self.screenshots)
+                    state["elapsed_ms"] = round((time.perf_counter() - state["started_at"]) * 1000)
                 return self.snapshot()
         elif name == "predict":
             if not state["browser"]:
