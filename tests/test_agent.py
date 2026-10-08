@@ -303,12 +303,24 @@ def test_flight_verification_rejects_wrong_trip(changed):
 
 
 @pytest.mark.parametrize(
-    "content", ["Thinking: Zurich", '{"text":null}', '{"text":"Zurich","extra":true}', '{"text":123}']
+    "content", ["Thinking: Zurich", '{"text":"Zurich","extra":true}', '{"text":123}']
 )
 def test_text_helper_rejects_invalid_values(monkeypatch, content):
     monkeypatch.setenv("TEXT_MODEL_API_KEY", "test")
     monkeypatch.setattr(model, "post_json", Mock(return_value={"choices": [{"message": {"content": content}}]}))
     with pytest.raises(ValueError, match="nothing typed"):
+        model.field_text({"goal": "Find a flight"})
+
+
+def test_text_helper_null_text_raises_missing_field_not_value_error(monkeypatch):
+    # The prompt contract says {"text": null} means "the goal has no value
+    # for this field" (#203): it must not collapse into the generic
+    # malformed-payload ValueError, so callers can tell the two apart.
+    monkeypatch.setenv("TEXT_MODEL_API_KEY", "test")
+    monkeypatch.setattr(
+        model, "post_json", Mock(return_value={"choices": [{"message": {"content": '{"text":null}'}}]})
+    )
+    with pytest.raises(model.MissingFieldError, match="missing from the goal"):
         model.field_text({"goal": "Find a flight"})
 
 
