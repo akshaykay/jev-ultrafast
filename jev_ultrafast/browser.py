@@ -146,6 +146,14 @@ def browser_operation(request):
         kind = action["kind"]
         if kind == "scroll":
             call("Input.dispatchMouseEvent", type="mouseWheel", x=550, y=650, deltaX=0, deltaY=action["delta"])
+        elif kind == "dismiss":
+            # Only offered when the snapshot's own occlusion check actually
+            # excluded a covered element, so this fires on a measured
+            # signal, not a guess. No node: a modal's close control, if it
+            # even has one, is exactly what the occlusion check is hiding
+            # from the action space in the first place.
+            call("Input.dispatchKeyEvent", type="keyDown", key="Escape", code="Escape", windowsVirtualKeyCode=27)
+            call("Input.dispatchKeyEvent", type="keyUp", key="Escape", code="Escape", windowsVirtualKeyCode=27)
         elif kind != "wait":
             if type(action["node"]) is not int:
                 raise ValueError("Invalid observed node")

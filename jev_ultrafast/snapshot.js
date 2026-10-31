@@ -53,6 +53,7 @@
       e.getAttribute('href'),scope?.innerText?.slice(0,6000)||''];
   };
   const actions=[];
+  let occluded=false;
   for (const e of document.querySelectorAll(selector)) {
     if (!safe(e) || !visible(e) || e.matches(':disabled') || e.closest('[aria-disabled="true"]')) continue;
     const r=e.getBoundingClientRect(), x=r.x+r.width/2, y=r.y+r.height/2, rname=role(e);
@@ -65,7 +66,7 @@
     // Confirm this element is still the actual topmost thing at its own
     // center before offering it.
     const top=document.elementFromPoint(x,y);
-    if (!top || !(e.contains(top) || top.contains(e))) continue;
+    if (!top || !(e.contains(top) || top.contains(e))) { occluded=true; continue; }
     if (rname==='gridcell' && e.querySelector('button,[role="button"]')) continue;
     const base={node:identity(e),role:rname,label:name(e)||rname,
       rect:{x:r.x,y:r.y,w:r.width,h:r.height}};
@@ -110,6 +111,14 @@
   actions.forEach((a,i)=>a.id='e'+(i+1));
   if (scrollY+innerHeight<height-2) actions.push({id:'scroll_down',kind:'scroll',label:'Scroll down',delta:560});
   if (scrollY>0) actions.push({id:'scroll_up',kind:'scroll',label:'Scroll up',delta:-560});
+  // Offered only when this scan actually excluded a covered element (the
+  // occlusion check above), not unconditionally: a real, measured signal
+  // that something is drawn over the page, not a guess from ARIA markup
+  // that a site may not set correctly (observed live on ClearTrip, whose
+  // login modal left the page behind it with no aria-hidden at all). A
+  // dialog with no visible close control, or one that only exposes an
+  // unwanted call-to-action, has nothing else a policy could safely choose.
+  if (occluded) actions.push({id:'dismiss',kind:'dismiss',label:'Press Escape to dismiss a covering overlay'});
   actions.push({id:'wait',kind:'wait',label:'Wait for the page to update'});
   return {url:location.href,title:document.title,w:innerWidth,h:innerHeight,text,
     scroll:{y:scrollY,height},actions,marker,page_key,guards,omitted_actions};

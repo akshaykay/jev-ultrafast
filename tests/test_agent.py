@@ -274,6 +274,27 @@ def test_fresh_checks_the_element_guard_for_fill_too(kind):
     assert "c.guard(c.nodes.get(10))" in b.evaluate.call_args.args[0]
 
 
+def test_dismiss_presses_escape_without_needing_a_node(monkeypatch):
+    """dismiss is only offered when the snapshot's occlusion check actually
+    excluded a covered element (snapshot.js), so it has no target node to
+    resolve, unlike click/fill/select. It must not fall into the node-based
+    branch of browser_operation, which would KeyError on a missing "node".
+    """
+    import jev_ultrafast.browser as browser
+
+    cdp = Mock(return_value={"result": {"value": None}})
+    monkeypatch.setattr(browser, "cdp", cdp)
+    result = browser_operation(
+        {"operation": "act", "session": "test", "action": {"id": "dismiss", "kind": "dismiss"}}
+    )
+    assert result == {"executed": "dismiss"}
+    assert cdp.call_count == 2
+    for call in cdp.call_args_list:
+        assert call.args[0] == "Input.dispatchKeyEvent"
+        assert call.kwargs["key"] == "Escape"
+    assert {c.kwargs["type"] for c in cdp.call_args_list} == {"keyDown", "keyUp"}
+
+
 @pytest.mark.parametrize("response", [{"exceptionDetails": {}}, {"result": {}}])
 def test_interrupted_dropdown_mutation_cannot_be_retried_as_stale(monkeypatch, response):
     import jev_ultrafast.browser as browser
