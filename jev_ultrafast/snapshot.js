@@ -14,12 +14,23 @@
     seen.add(e);
     const referenced=(e.getAttribute('aria-labelledby')||'').split(/\s+/)
       .map(id=>name(document.getElementById(id),seen)).filter(Boolean).join(' ');
-    return referenced || e.getAttribute('aria-label') ||
+    const full=referenced || e.getAttribute('aria-label') ||
       [...(e.labels||[])].map(l=>name(l,seen)).filter(Boolean).join(' ') ||
       (['button','submit','reset'].includes(e.type) ? e.value : '') || e.getAttribute('alt') ||
       (e.tagName==='INPUT' ? '' : [...e.childNodes].map(n=>n.nodeType===3 ? n.textContent :
         n.nodeType===1 && n.getAttribute('aria-hidden')!=='true' ? name(n,seen) : '').join(' ').trim()) ||
       e.getAttribute('title') || e.getAttribute('placeholder') || '';
+    // A container with no more specific name (no aria-label, no
+    // labelledby, no title) falls through to concatenating every
+    // descendant's text with no bound at all. Observed live on
+    // MakeMyTrip: a From/To/Departure wrapper's computed name ran to 1247
+    // characters, and a results-dropdown wrapper's to 952, both offered as
+    // candidates alongside the real, cleanly-labeled "To" input sitting
+    // right underneath them. Capped the same way text is already sliced
+    // elsewhere in this file; the text-gathering priority above is
+    // unchanged; only how much of the result survives into the label the
+    // model actually sees.
+    return full.length>160 ? full.slice(0,160).trim()+'…' : full;
   };
   const roles=['button','link','checkbox','radio','switch','tab','menuitem','menuitemradio',
     'option','gridcell','combobox','textbox','searchbox','spinbutton'];
