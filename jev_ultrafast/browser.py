@@ -86,7 +86,16 @@ class Browser:
         raise StalePage("Page did not settle")
 
     def fresh(self, page, action=None):
-        if action is not None and action["kind"] in {"click", "select"}:
+        # "fill" used the whole-page marker (full visible text + every
+        # action's semantics) instead of this one element's own guard. Any
+        # unrelated visible content elsewhere on the page invalidated every
+        # TYPE_TEXT decision regardless of the target field, observed on
+        # ClearTrip's rotating promo carousel: 120/120 decisions picked the
+        # same field and 0 ever executed. click/select already use the
+        # element-level guard; fill needs the same freshness check, not a
+        # stricter one, since it is no more sensitive to unrelated page
+        # content than those.
+        if action is not None and action["kind"] in {"click", "select", "fill"}:
             node = action["node"]
             if type(node) is not int:
                 return False

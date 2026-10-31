@@ -251,6 +251,29 @@ def test_executor_rejects_a_stale_page_before_browser_input(monkeypatch):
     operation.assert_not_called()
 
 
+@pytest.mark.parametrize("kind", ["click", "select", "fill"])
+def test_fresh_checks_the_element_guard_for_fill_too(kind):
+    """fill used to fall through to the whole-page marker instead of this
+    element's own guard, so any unrelated visible content changing
+    elsewhere (a rotating promo carousel, observed live on ClearTrip)
+    invalidated every TYPE_TEXT decision regardless of the target field:
+    120/120 decisions picked the same field and 0 ever executed. click and
+    select already use the element-level guard; fill must take the same
+    path, not a stricter one.
+    """
+    import jev_ultrafast.browser as browser
+
+    b = browser.Browser.__new__(browser.Browser)
+    b.evaluate = Mock(return_value=["pk", {"guard": "same"}])
+    p = page()
+    p["page_key"] = "pk"
+    p["guards"] = {"10": {"guard": "same"}}
+    action = {"id": "e1", "kind": kind, "node": 10}
+    assert b.fresh(p, action) is True
+    b.evaluate.assert_called_once()
+    assert "c.guard(c.nodes.get(10))" in b.evaluate.call_args.args[0]
+
+
 @pytest.mark.parametrize("response", [{"exceptionDetails": {}}, {"result": {}}])
 def test_interrupted_dropdown_mutation_cannot_be_retried_as_stale(monkeypatch, response):
     import jev_ultrafast.browser as browser
