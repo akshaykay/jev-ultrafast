@@ -274,11 +274,16 @@ def test_fresh_checks_the_element_guard_for_fill_too(kind):
     assert "c.guard(c.nodes.get(10))" in b.evaluate.call_args.args[0]
 
 
-def test_dismiss_presses_escape_without_needing_a_node(monkeypatch):
+def test_dismiss_tries_escape_and_an_outside_click_without_needing_a_node(monkeypatch):
     """dismiss is only offered when the snapshot's occlusion check actually
     excluded a covered element (snapshot.js), so it has no target node to
     resolve, unlike click/fill/select. It must not fall into the node-based
     branch of browser_operation, which would KeyError on a missing "node".
+
+    Two independent, unverified-per-site dismiss conventions are attempted:
+    Escape, then a corner click for a "click outside to dismiss" backdrop
+    handler. Verified live that ClearTrip's own popups respond to neither
+    perfectly, but a real site may bind either one.
     """
     import jev_ultrafast.browser as browser
 
@@ -288,11 +293,13 @@ def test_dismiss_presses_escape_without_needing_a_node(monkeypatch):
         {"operation": "act", "session": "test", "action": {"id": "dismiss", "kind": "dismiss"}}
     )
     assert result == {"executed": "dismiss"}
-    assert cdp.call_count == 2
-    for call in cdp.call_args_list:
-        assert call.args[0] == "Input.dispatchKeyEvent"
-        assert call.kwargs["key"] == "Escape"
-    assert {c.kwargs["type"] for c in cdp.call_args_list} == {"keyDown", "keyUp"}
+    assert cdp.call_count == 4
+    key_calls = [c for c in cdp.call_args_list if c.args[0] == "Input.dispatchKeyEvent"]
+    mouse_calls = [c for c in cdp.call_args_list if c.args[0] == "Input.dispatchMouseEvent"]
+    assert {c.kwargs["type"] for c in key_calls} == {"keyDown", "keyUp"}
+    assert all(c.kwargs["key"] == "Escape" for c in key_calls)
+    assert {c.kwargs["type"] for c in mouse_calls} == {"mousePressed", "mouseReleased"}
+    assert all(c.kwargs["x"] == 5 and c.kwargs["y"] == 5 for c in mouse_calls)
 
 
 @pytest.mark.parametrize("response", [{"exceptionDetails": {}}, {"result": {}}])

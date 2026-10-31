@@ -151,9 +151,16 @@ def browser_operation(request):
             # excluded a covered element, so this fires on a measured
             # signal, not a guess. No node: a modal's close control, if it
             # even has one, is exactly what the occlusion check is hiding
-            # from the action space in the first place.
+            # from the action space in the first place. Two independent
+            # dismiss conventions, neither guaranteed: Escape (verified live
+            # it does not close every modal, e.g. ClearTrip's own) and a
+            # click just inside the viewport corner, which a full-viewport
+            # backdrop covers even when centered dialog content does not,
+            # so a real "click outside to dismiss" handler still fires.
             call("Input.dispatchKeyEvent", type="keyDown", key="Escape", code="Escape", windowsVirtualKeyCode=27)
             call("Input.dispatchKeyEvent", type="keyUp", key="Escape", code="Escape", windowsVirtualKeyCode=27)
+            for event in ("mousePressed", "mouseReleased"):
+                call("Input.dispatchMouseEvent", type=event, x=5, y=5, button="left", clickCount=1)
         elif kind != "wait":
             if type(action["node"]) is not int:
                 raise ValueError("Invalid observed node")
