@@ -33,7 +33,7 @@
     return full.length>160 ? full.slice(0,160).trim()+'…' : full;
   };
   const roles=['button','link','checkbox','radio','switch','tab','menuitem','menuitemradio',
-    'option','gridcell','combobox','textbox','searchbox','spinbutton'];
+    'option','gridcell','combobox','textbox','searchbox','spinbutton','slider'];
   const selector='a[href],button,input,textarea,select,summary,[contenteditable="true"],'+
     roles.map(role=>'[role="'+role+'"]').join(',');
   const role = e => {
@@ -48,6 +48,7 @@
       if (['button','submit','reset','image'].includes(e.type)) return 'button';
       if (e.type==='search') return 'searchbox';
       if (e.type==='number') return 'spinbutton';
+      if (e.type==='range') return 'slider';
       if (['text','email','url','tel'].includes(e.type)) return 'textbox';
     }
     return null;
@@ -90,6 +91,29 @@
       for (const o of e.options) if (!o.selected && !o.disabled && !o.closest('optgroup[disabled]'))
         actions.push({...base,kind:'select',value:o.value,
           current_value:[...e.selectedOptions].map(o=>o.label).join(', '),label:base.label+' → '+o.label});
+    } else if (e.tagName==='INPUT' && e.type==='range') {
+      // A native range input has no element.options the way a <select>
+      // does, but reuses the same already-wired SELECT operation end to
+      // end (model.py, action_space(), the decision protocol) once given
+      // its own enumerated value targets here and a matching value-aware
+      // validation in browser.py's executor. Observed live on
+      // BookMyShow's "How many seats?" picker: role() had no case for
+      // type=range at all, so the slider -- the only real control behind
+      // the visually-styled "1 2 3 ... 10" tick labels drawn over it --
+      // was invisible to every pass, native and new, regardless of
+      // visibility or occlusion. Capped at 20 target values (sampled
+      // evenly across the full range, always including both endpoints)
+      // so a wide-range slider (e.g. a price filter) can't blow the
+      // action budget the way this confirmed 1-10/step-1 case never would.
+      const min=Number(e.min||0), max=Number(e.max||100), step=Number(e.step||1)||1;
+      const count=Math.floor((max-min)/step)+1;
+      const values=[];
+      if (count<=20) for (let v=min; v<=max+1e-9; v+=step) values.push(Math.round(v*1e6)/1e6);
+      else for (let i=0;i<20;i++) values.push(Math.round((min+(max-min)*i/19)*1e6)/1e6);
+      const current=Number(e.value);
+      for (const v of values) if (v!==current)
+        actions.push({...base,kind:'select',value:String(v),
+          current_value:String(current),label:base.label+' → '+v});
     } else {
       const editable=!e.readOnly && e.getAttribute('aria-readonly')!=='true' &&
         (['textbox','searchbox','spinbutton'].includes(rname) ||

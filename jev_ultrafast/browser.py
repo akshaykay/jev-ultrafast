@@ -217,8 +217,21 @@ def browser_operation(request):
               if (!r.width || !r.height || x<0 || y<0 || x>=innerWidth || y>=innerHeight) return null;
               if (!e.contains(document.elementFromPoint(x,y))) return null;
               if (action.kind==='select') {
-                if (e.tagName!=='SELECT' || ![...e.options].some(o=>o.value===action.value &&
-                    !o.disabled && !o.closest('optgroup[disabled]'))) return null;
+                // A native range input shares the SELECT operation end to
+                // end (same protocol, same model.py wiring) rather than a
+                // dedicated kind: it has no e.options the way a <select>
+                // does, so its target value is checked against min/max
+                // instead, and the same direct value+events assignment
+                // below already sets a range input's value correctly.
+                if (e.tagName==='SELECT') {
+                  if (![...e.options].some(o=>o.value===action.value &&
+                      !o.disabled && !o.closest('optgroup[disabled]'))) return null;
+                } else if (e.tagName==='INPUT' && e.type==='range') {
+                  const min=Number(e.min||0), max=Number(e.max||100), v=Number(action.value);
+                  if (!Number.isFinite(v) || v<min-1e-9 || v>max+1e-9) return null;
+                } else {
+                  return null;
+                }
                 e.value=action.value;
                 e.dispatchEvent(new Event('input',{bubbles:true}));
                 e.dispatchEvent(new Event('change',{bubbles:true}));
