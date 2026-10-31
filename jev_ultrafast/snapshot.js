@@ -210,8 +210,21 @@
   const text=words.join('\n').slice(0,6000), height=document.documentElement.scrollHeight;
   const page_key=cache.pageKey(), guards={};
   for (const a of actions) if (!(a.node in guards)) guards[a.node]=cache.guard(cache.nodes.get(a.node));
-  // Compare meaning and identity. Geometry is always resolved and hit-tested just before input.
-  const semantics=actions.map(({rect,...action})=>action);
+  // Compare meaning, not identity: node is an incrementing per-element
+  // counter (identity()), not a content signal. A rotating banner/carousel
+  // that swaps in a fresh DOM node for the same visual slot changes node
+  // on every rotation while role/label/kind/value stay identical -- proven
+  // live on BookMyShow's homepage promo banner (node 15 -> 52 every ~2.5s,
+  // zero other change). That churn alone was enough to fail the DONE/
+  // BLOCKED freshness check (act()'s fresh(page) with no action arg, which
+  // falls through to this whole-page marker), discarding a correct BLOCKED
+  // choice as stale on an unrelated timer and silently resetting status to
+  // "ready" -- the agent then just retries from scratch, often forever.
+  // Geometry is always resolved and hit-tested just before input, so it was
+  // already excluded; node needs the same treatment for this comparison
+  // only, since it is the one marker-consumer (the DONE/BLOCKED gate) with
+  // no narrower per-element guard the way click/select/fill already have.
+  const semantics=actions.map(({rect,node,...action})=>action);
   const marker=[performance.timeOrigin,location.href,scrollX,scrollY,innerWidth,innerHeight,
     document.title,text,semantics,page_key[6]];
   const omitted_actions=Math.max(0,actions.length-250);
