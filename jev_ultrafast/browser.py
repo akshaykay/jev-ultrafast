@@ -44,23 +44,36 @@ class Browser:
     def observe(self, screenshot=True):
         if getattr(self, "after_input", None):
             action, self.after_input = self.after_input, None
+            pre_url = getattr(self, "pre_action_url", None)
             # This is read-only and happens after execution was logged, even if navigation interrupts it.
             try:
                 self.call(
                     "Runtime.evaluate",
-                    expression="""(action => new Promise(resolve => {
+                    expression="""((action, preUrl) => new Promise(resolve => {
                       const field=window.__jevFast?.nodes.get(action.node);
                       const autocomplete=action.kind==='fill' && field?.getAttribute('role')==='combobox';
+                      // A same-document SPA route change (location.href now
+                      // differs from the URL this action started from) still
+                      // has to mount its new component tree and fetch its
+                      // own data; readyState stays 'complete' throughout
+                      // History-API navigation, so it is not a usable
+                      // signal here. Observed live on district.in: an
+                      // artist page's carousel was invisible to the very
+                      // next observation after the click that navigated to
+                      // it. Capped higher than the autocomplete wait, and
+                      // only applied when a navigation actually happened,
+                      // not unconditionally slower for every click.
+                      const navigated=preUrl!==null && location.href!==preUrl;
                       let frames=0, stopped=false;
                       const finish=()=>{stopped=true;resolve()};
-                      setTimeout(finish,autocomplete ? 200 : 50);
+                      setTimeout(finish, navigated ? 900 : (autocomplete ? 200 : 50));
                       const ready=()=>{
                         if (stopped) return;
                         const ids=(field?.getAttribute('aria-controls')||field?.getAttribute('aria-owns')||'')
                           .split(/\\s+/).filter(Boolean);
                         const roots=ids.length ? ids.map(id=>document.getElementById(id)).filter(Boolean) : [document];
                         const options=roots.flatMap(root=>[...root.querySelectorAll('[role="option"]')]);
-                        if (++frames>=2 && (!autocomplete || options.some(e=>{
+                        if (++frames>=(navigated ? 4 : 2) && (!autocomplete || options.some(e=>{
                           const r=e.getBoundingClientRect();
                           return r.width && r.height && r.bottom>0 && r.top<innerHeight &&
                             e.checkVisibility({checkOpacity:true,checkVisibilityCSS:true});
@@ -68,7 +81,7 @@ class Browser:
                         else requestAnimationFrame(ready);
                       };
                       requestAnimationFrame(ready);
-                    }))(""" + json.dumps(action) + ")",
+                    }))(""" + json.dumps(action) + ", " + json.dumps(pre_url) + ")",
                     awaitPromise=True,
                     returnByValue=True,
                 )
@@ -111,6 +124,11 @@ class Browser:
             raise StalePage("Page changed since this decision. Observe again.")
         if action["kind"] == "wait":
             time.sleep(0.1)
+        # Recorded before executing, so observe()'s settle wait can tell a
+        # same-document SPA route change from an ordinary click: it needs
+        # to compare against the URL this action started from, not
+        # whatever the URL happens to be once settling begins.
+        self.pre_action_url = page["url"]
         result = browser_operation({"operation": "act", "session": self.session, "action": action, "text": text})
         self.after_input = action if action["kind"] != "wait" else None
         return result

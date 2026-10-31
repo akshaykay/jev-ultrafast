@@ -274,6 +274,33 @@ def test_fresh_checks_the_element_guard_for_fill_too(kind):
     assert "c.guard(c.nodes.get(10))" in b.evaluate.call_args.args[0]
 
 
+def test_observe_settle_wait_knows_the_url_this_action_started_from(monkeypatch):
+    """observe()'s settle wait needs the pre-action URL to tell a
+    same-document SPA route change from an ordinary click (readyState
+    stays 'complete' through History-API navigation, so it cannot tell
+    them apart on its own). act() must record it before executing, not
+    read it back from whatever page state exists once settling begins.
+    """
+    import jev_ultrafast.browser as browser
+
+    b = browser.Browser.__new__(browser.Browser)
+    b.session = "test"
+    b.fresh = Mock(return_value=True)
+    b.after_input = None
+    monkeypatch.setattr(browser, "browser_operation", Mock(return_value={}))
+    p = page()
+    p["url"] = "https://example.test/search"
+    action = {"id": "e3", "kind": "click", "node": 20}
+    b.act(action, p)
+    assert b.pre_action_url == "https://example.test/search"
+
+    b.call = Mock(return_value={})
+    monkeypatch.setattr(browser, "browser_operation", Mock(return_value=page()))
+    b.observe(screenshot=False)
+    expr = b.call.call_args.kwargs["expression"]
+    assert expr.endswith(json.dumps(action) + ", " + json.dumps("https://example.test/search") + ")")
+
+
 def test_hscroll_targets_the_carousels_own_point_not_the_page(monkeypatch):
     """Page-level scroll is vertical only; a horizontal carousel (observed
     live on district.in: an artist page with scrollHeight === innerHeight,
