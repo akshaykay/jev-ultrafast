@@ -57,6 +57,15 @@
     if (!safe(e) || !visible(e) || e.matches(':disabled') || e.closest('[aria-disabled="true"]')) continue;
     const r=e.getBoundingClientRect(), x=r.x+r.width/2, y=r.y+r.height/2, rname=role(e);
     if (!rname || r.width<=0 || r.height<=0 || x<0 || y<0 || x>=innerWidth || y>=innerHeight) continue;
+    // visible() only checks this element's own CSS visibility, not whether
+    // something else is drawn on top of it. A modal that doesn't mark the
+    // page behind it aria-hidden (observed live on ClearTrip: an
+    // auto-opened login dialog) leaves the covered field passing every
+    // check above while a real click/fill would land on the modal instead.
+    // Confirm this element is still the actual topmost thing at its own
+    // center before offering it.
+    const top=document.elementFromPoint(x,y);
+    if (!top || !(e.contains(top) || top.contains(e))) continue;
     if (rname==='gridcell' && e.querySelector('button,[role="button"]')) continue;
     const base={node:identity(e),role:rname,label:name(e)||rname,
       rect:{x:r.x,y:r.y,w:r.width,h:r.height}};
