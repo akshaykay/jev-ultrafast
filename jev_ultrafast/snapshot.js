@@ -100,6 +100,79 @@
       if (editable) actions.push({...base,kind:'click',value,label:'Open '+base.label});
     }
   }
+  // Non-native clickable rows (bare li/div/span/td/dd/p whose only sign of
+  // interactivity is cursor:pointer, e.g. an autocomplete dropdown's own
+  // suggestion rows) are invisible to the selector loop above, which only
+  // matches native controls and elements with an explicit ARIA role. Once
+  // such a dropdown is open, CLICK has no supported target inside it at
+  // all, so the policy can only retype the same field forever. Observed
+  // live on ClearTrip's city autocomplete: zero of "Mumbai", "Bengaluru",
+  // etc. were ever offered as candidates, burning the full decision
+  // budget retyping "Where to". Matches
+  // github.com/browser-use/jev-ultrafast#23.
+  const nonNativeTags=new Set(['LI','DIV','SPAN','TD','DD','P']);
+  const seenPointer=new Set(), claimedClickable=new Set();
+  let addedPointer=0;
+  for (const start of document.querySelectorAll('li,div,span,td,dd,p')) {
+    if (addedPointer>=40) break;
+    if (!nonNativeTags.has(start.tagName) || !visible(start)) continue;
+    if (start.closest('a[href],button,input,textarea,select,summary,[contenteditable="true"]')) continue;
+    if (getComputedStyle(start).cursor!=='pointer') continue;
+    // Climb to the outermost ancestor still styled cursor:pointer, so a
+    // row's own text spans (which inherit the cursor) don't each become a
+    // separate candidate alongside the row itself.
+    let e=start;
+    while (e.parentElement && e.parentElement!==document.body &&
+      getComputedStyle(e.parentElement).cursor==='pointer') {
+      e=e.parentElement;
+    }
+    if (seenPointer.has(e) || e.querySelector(selector)) continue;
+    seenPointer.add(e);
+    claimedClickable.add(e);
+    const r=e.getBoundingClientRect(), x=r.x+r.width/2, y=r.y+r.height/2;
+    if (r.width<=0 || r.height<=0 || x<0 || y<0 || x>=innerWidth || y>=innerHeight) continue;
+    const top=document.elementFromPoint(x,y);
+    if (!top || !(e.contains(top) || top.contains(e))) { occluded=true; continue; }
+    const label=name(e)||e.innerText.trim().slice(0,160);
+    if (!label) continue;
+    actions.push({node:identity(e),role:'button',label,
+      rect:{x:r.x,y:r.y,w:r.width,h:r.height},kind:'click',value:''});
+    addedPointer++;
+  }
+  // A compound ARIA container (listbox/menu/tree/grid/radiogroup) implies
+  // its children carry a matching typed role (option/menuitem/treeitem/
+  // gridcell/radio), but a site can role-tag the container correctly and
+  // never role-tag the repeated rows themselves. Checked directly via CDP's
+  // getEventListeners on ClearTrip's city autocomplete: the `role="listbox"`
+  // suggestion rows have no cursor:pointer AND no element-level click
+  // listener at all (React's root-level delegated click handler is
+  // invisible to both per-element signals), so neither the pass above nor
+  // an own-listener check could ever find them. The row is still a normal,
+  // real click target once offered -- a synthetic click dispatched at its
+  // coordinates reaches the same delegated handler a real user click would.
+  const rowParentRoles={listbox:'option',menu:'menuitem',tree:'treeitem',grid:'gridcell',radiogroup:'radio'};
+  let addedRow=0;
+  for (const container of document.querySelectorAll(Object.keys(rowParentRoles).map(r=>'[role="'+r+'"]').join(','))) {
+    if (addedRow>=40 || !visible(container)) continue;
+    const rowRole=rowParentRoles[container.getAttribute('role')];
+    for (const row of container.querySelectorAll('li,tr')) {
+      if (addedRow>=40) break;
+      if (claimedClickable.has(row) || row.matches(selector) || row.querySelector(selector)) continue;
+      let p=row.parentElement, nested=false;
+      while (p && p!==container) { if (p.tagName==='LI' || p.tagName==='TR') { nested=true; break; } p=p.parentElement; }
+      if (nested || !visible(row)) continue;
+      claimedClickable.add(row);
+      const r=row.getBoundingClientRect(), x=r.x+r.width/2, y=r.y+r.height/2;
+      if (r.width<=0 || r.height<=0 || x<0 || y<0 || x>=innerWidth || y>=innerHeight) continue;
+      const top=document.elementFromPoint(x,y);
+      if (!top || !(row.contains(top) || top.contains(row))) { occluded=true; continue; }
+      const label=name(row)||row.innerText.trim().slice(0,160);
+      if (!label) continue;
+      actions.push({node:identity(row),role:rowRole,label,
+        rect:{x:r.x,y:r.y,w:r.width,h:r.height},kind:'click',value:''});
+      addedRow++;
+    }
+  }
   const words=[], walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);
   const range=document.createRange(); let node,length=0;
   while ((node=walker.nextNode()) && length<6000) {
