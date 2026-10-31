@@ -163,7 +163,20 @@ def browser_operation(request):
         action = request["action"]
         kind = action["kind"]
         if kind == "scroll":
-            call("Input.dispatchMouseEvent", type="mouseWheel", x=550, y=650, deltaX=0, deltaY=action["delta"])
+            # snapshot.js binds x/y to the one actually-scrolling inner
+            # container's own point when the page itself has nothing left
+            # to scroll (document.documentElement.scrollHeight ==
+            # innerHeight while a fixed h-screen/overflow-y-auto app-shell
+            # div underneath it does not); the fixed page point is the
+            # fallback for an ordinary page-level scroll_down/up.
+            call(
+                "Input.dispatchMouseEvent",
+                type="mouseWheel",
+                x=action.get("x", 550),
+                y=action.get("y", 650),
+                deltaX=0,
+                deltaY=action["delta"],
+            )
         elif kind == "hscroll":
             # Unlike page-level scroll, the wheel event must land on the
             # carousel's own center point (snapshot.js computed it), or it

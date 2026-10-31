@@ -195,6 +195,40 @@
   actions.forEach((a,i)=>a.id='e'+(i+1));
   if (scrollY+innerHeight<height-2) actions.push({id:'scroll_down',kind:'scroll',label:'Scroll down',delta:560});
   if (scrollY>0) actions.push({id:'scroll_up',kind:'scroll',label:'Scroll up',delta:-560});
+  // document.documentElement.scrollHeight can equal innerHeight -- nothing
+  // left to scroll by this page-level measure -- while the real content
+  // lives inside one inner container using its own overflow-y:auto scroll
+  // instead of document scroll, a common SPA app-shell pattern (a fixed
+  // h-screen root div). Observed live on district.in: an artist page's
+  // entire show-card list sat inside such a container (1827px of real
+  // content against a 780px viewport, document scrollHeight reporting
+  // 780), so scroll_down was never offered and the agent had no way to
+  // reach anything below the hero section, previously misread as
+  // site-side flakiness rather than this. Only a fallback: checked, and
+  // offered under the same scroll_down/scroll_up ids, exactly when the
+  // page itself truly has nothing left to scroll in that direction, so
+  // it never competes with or shadows a real page-level scroll.
+  if (scrollY+innerHeight>=height-2 || scrollY<=0) {
+    let vscroll=null, vscrollArea=0;
+    for (const el of document.querySelectorAll('*')) {
+      if (el===document.documentElement || el===document.body) continue;
+      const style=getComputedStyle(el);
+      if (!['auto','scroll'].includes(style.overflowY)) continue;
+      if (el.scrollHeight<=el.clientHeight+4) continue;
+      const r=el.getBoundingClientRect();
+      if (r.width<=0 || r.height<=0 || r.bottom<=0 || r.top>=innerHeight) continue;
+      const area=r.width*r.height;
+      if (area>vscrollArea) { vscrollArea=area; vscroll={el,r}; }
+    }
+    if (vscroll) {
+      const cx=Math.max(0,Math.min(innerWidth-1,vscroll.r.x+vscroll.r.width/2));
+      const cy=Math.max(0,Math.min(innerHeight-1,vscroll.r.y+vscroll.r.height/2));
+      if (scrollY+innerHeight>=height-2 && vscroll.el.scrollTop<vscroll.el.scrollHeight-vscroll.el.clientHeight-2)
+        actions.push({id:'scroll_down',kind:'scroll',label:'Scroll down',delta:560,x:cx,y:cy});
+      if (scrollY<=0 && vscroll.el.scrollTop>0)
+        actions.push({id:'scroll_up',kind:'scroll',label:'Scroll up',delta:-560,x:cx,y:cy});
+    }
+  }
   // Page-level scroll is vertical only. A horizontally-scrolling carousel
   // (observed live on district.in: an artist page whose bookable show
   // cards sit in an overflow-x region with nothing below the fold at all,
