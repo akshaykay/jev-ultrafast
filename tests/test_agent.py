@@ -274,6 +274,32 @@ def test_fresh_checks_the_element_guard_for_fill_too(kind):
     assert "c.guard(c.nodes.get(10))" in b.evaluate.call_args.args[0]
 
 
+def test_hscroll_targets_the_carousels_own_point_not_the_page(monkeypatch):
+    """Page-level scroll is vertical only; a horizontal carousel (observed
+    live on district.in: an artist page with scrollHeight === innerHeight,
+    so no vertical scroll was ever offered, whose bookable show cards sat
+    in an overflow-x region jev-ultrafast had no action for at all) needs
+    the wheel event aimed at its own center, not the fixed page-scroll
+    point, or the carousel never actually moves.
+    """
+    import jev_ultrafast.browser as browser
+
+    cdp = Mock(return_value={"result": {"value": None}})
+    monkeypatch.setattr(browser, "cdp", cdp)
+    action = {"id": "scroll_right", "kind": "hscroll", "deltaX": 360, "x": 400, "y": 300}
+    result = browser_operation({"operation": "act", "session": "test", "action": action})
+    assert result == {"executed": "scroll_right"}
+    cdp.assert_called_once_with(
+        "Input.dispatchMouseEvent",
+        session_id="test",
+        type="mouseWheel",
+        x=400,
+        y=300,
+        deltaX=360,
+        deltaY=0,
+    )
+
+
 def test_dismiss_tries_escape_and_an_outside_click_without_needing_a_node(monkeypatch):
     """dismiss is only offered when the snapshot's occlusion check actually
     excluded a covered element (snapshot.js), so it has no target node to

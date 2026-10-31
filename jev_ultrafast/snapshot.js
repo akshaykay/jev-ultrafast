@@ -111,6 +111,33 @@
   actions.forEach((a,i)=>a.id='e'+(i+1));
   if (scrollY+innerHeight<height-2) actions.push({id:'scroll_down',kind:'scroll',label:'Scroll down',delta:560});
   if (scrollY>0) actions.push({id:'scroll_up',kind:'scroll',label:'Scroll up',delta:-560});
+  // Page-level scroll is vertical only. A horizontally-scrolling carousel
+  // (observed live on district.in: an artist page whose bookable show
+  // cards sit in an overflow-x region with nothing below the fold at all,
+  // scrollHeight === innerHeight) is invisible to it, so the agent had no
+  // supported action to reach them and correctly, but unhelpfully, ended
+  // BLOCKED. Offer the single largest visible overflow-x:auto|scroll
+  // region on screen, the same way page scroll is already offered, bound
+  // to its own element and center point so the wheel event actually lands
+  // on it instead of the page.
+  let hscroll=null, hscrollArea=0;
+  for (const el of document.querySelectorAll('*')) {
+    const style=getComputedStyle(el);
+    if (!['auto','scroll'].includes(style.overflowX)) continue;
+    if (el.scrollWidth<=el.clientWidth+4) continue;
+    const r=el.getBoundingClientRect();
+    if (r.width<=0 || r.height<=0 || r.bottom<=0 || r.top>=innerHeight) continue;
+    const area=r.width*r.height;
+    if (area>hscrollArea) { hscrollArea=area; hscroll={el,r}; }
+  }
+  if (hscroll) {
+    const cx=Math.max(0,Math.min(innerWidth-1,hscroll.r.x+hscroll.r.width/2));
+    const cy=Math.max(0,Math.min(innerHeight-1,hscroll.r.y+hscroll.r.height/2));
+    if (hscroll.el.scrollLeft<hscroll.el.scrollWidth-hscroll.el.clientWidth-2)
+      actions.push({id:'scroll_right',kind:'hscroll',label:'Scroll right to see more',deltaX:360,x:cx,y:cy});
+    if (hscroll.el.scrollLeft>0)
+      actions.push({id:'scroll_left',kind:'hscroll',label:'Scroll left',deltaX:-360,x:cx,y:cy});
+  }
   // Offered only when this scan actually excluded a covered element (the
   // occlusion check above), not unconditionally: a real, measured signal
   // that something is drawn over the page, not a guess from ARIA markup

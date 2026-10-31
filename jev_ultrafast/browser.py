@@ -146,6 +146,18 @@ def browser_operation(request):
         kind = action["kind"]
         if kind == "scroll":
             call("Input.dispatchMouseEvent", type="mouseWheel", x=550, y=650, deltaX=0, deltaY=action["delta"])
+        elif kind == "hscroll":
+            # Unlike page-level scroll, the wheel event must land on the
+            # carousel's own center point (snapshot.js computed it), or it
+            # scrolls the page instead of the region.
+            call(
+                "Input.dispatchMouseEvent",
+                type="mouseWheel",
+                x=action["x"],
+                y=action["y"],
+                deltaX=action["deltaX"],
+                deltaY=0,
+            )
         elif kind == "dismiss":
             # Only offered when the snapshot's own occlusion check actually
             # excluded a covered element, so this fires on a measured
